@@ -178,7 +178,7 @@ def main():
         
         # Initialize classes
         coord_extractor = CoordinateExtractor()
-        weather_bot = WeatherByCoordinates("3aa05e76054ecc5912f49e7968a5a805")
+        weather_bot = WeatherByCoordinates(st.secrets["weather"]["api_key"])
 
         # User input
         question = st.text_input("Ask about weather in any location:", 
