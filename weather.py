@@ -14,6 +14,7 @@ if 'chat_history' not in st.session_state:
 class CoordinateExtractor:
     def __init__(self):
         self.api_key = st.secrets["gemini"]["api_key"]
+        # st.secrets["gemini"]["api_key"]
         
         self.location_llm = ChatGoogleGenerativeAI(
             model="gemini-pro",
