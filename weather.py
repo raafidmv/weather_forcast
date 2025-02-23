@@ -106,16 +106,33 @@ def display_weather_card(weather_data, lat, lon):
     col3, col4 = st.columns(2)
     
     with col3:
+        # Add 5 hours and 30 minutes to sunrise time
         sunrise = datetime.fromtimestamp(weather_data['sys']['sunrise'])
-        st.markdown(f"Sunrise: {sunrise.strftime('%I:%M %p')}")
+        sunrise_adjusted = sunrise.replace(
+            hour=(sunrise.hour + 5) % 24,
+            minute=(sunrise.minute + 30) % 60
+        )
+        # If minutes overflow, add an hour
+        if sunrise.minute + 30 >= 60:
+            sunrise_adjusted = sunrise_adjusted.replace(hour=(sunrise_adjusted.hour + 1) % 24)
+        st.markdown(f"Sunrise: {sunrise_adjusted.strftime('%I:%M %p')}")
     
     with col4:
+        # Add 5 hours and 30 minutes to sunset time
         sunset = datetime.fromtimestamp(weather_data['sys']['sunset'])
-        st.markdown(f"Sunset: {sunset.strftime('%I:%M %p')}")
+        sunset_adjusted = sunset.replace(
+            hour=(sunset.hour + 5) % 24,
+            minute=(sunset.minute + 30) % 60
+        )
+        # If minutes overflow, add an hour
+        if sunset.minute + 30 >= 60:
+            sunset_adjusted = sunset_adjusted.replace(hour=(sunset_adjusted.hour + 1) % 24)
+        st.markdown(f"Sunset: {sunset_adjusted.strftime('%I:%M %p')}")
     
     st.markdown("### 🗺️ Location Details")
     st.markdown(f"Latitude: {lat}°")
     st.markdown(f"Longitude: {lon}°")
+
 
 def main():
     st.set_page_config(page_title="Weather App", page_icon="🌤️", layout="wide")
