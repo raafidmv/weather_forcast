@@ -6,6 +6,7 @@ import json
 from typing import Dict
 import requests
 from datetime import datetime
+import re  # Import the regular expression module
 
 # Initialize session state for storing chat history
 if 'chat_history' not in st.session_state:
@@ -76,20 +77,33 @@ class CoordinateExtractor:
             
             log_message(f"Location response received: {location_response}")
             
-            # Ensure response is processed correctly (extract text from AIMessage)
-            location_data = json.loads(location_response.content)  # Extract content
-            
-            location = location_data["location"]
-            
-            log_message(f"Extracted location: {location}")
-            
-            # Extract coordinates for the location
-            coord_response = self.coord_chain.invoke({"location": location})
-            
-            log_message(f"Coordinate response received: {coord_response}")
-            
-            # Ensure response is processed correctly (extract text from AIMessage)
-            return json.loads(coord_response.content)  # Extract content
+            # Extract JSON using regex
+            json_match = re.search(r'\{.*\}', location_response.content)
+            if json_match:
+                location_json = json_match.group(0)
+                log_message(f"Extracted JSON: {location_json}")
+                location_data = json.loads(location_json)
+                location = location_data["location"]
+                
+                log_message(f"Extracted location: {location}")
+                
+                # Extract coordinates for the location
+                coord_response = self.coord_chain.invoke({"location": location})
+                
+                log_message(f"Coordinate response received: {coord_response}")
+                
+                # Extract JSON using regex
+                coord_json_match = re.search(r'\{.*\}', coord_response.content)
+                if coord_json_match:
+                    coord_json = coord_json_match.group(0)
+                    log_message(f"Extracted JSON: {coord_json}")
+                    return json.loads(coord_json)
+                else:
+                    log_message("No JSON found in coordinate response")
+                    return {"error": "No JSON found in coordinate response"}
+            else:
+                log_message("No JSON found in location response")
+                return {"error": "No JSON found in location response"}
             
         except Exception as e:
             log_message(f"Error extracting coordinates: {str(e)}")
