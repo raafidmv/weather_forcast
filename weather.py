@@ -1,7 +1,7 @@
 import streamlit as st
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from langchain_core.runnables import RunnableSequence
 import json
 from typing import Dict
 import requests
@@ -31,7 +31,10 @@ class CoordinateExtractor:
             """
         )
         
-        self.location_chain = LLMChain(llm=self.location_llm, prompt=self.location_prompt)
+        # Use RunnableSequence for compatibility with newer LangChain versions
+        self.location_chain = RunnableSequence(
+            self.location_prompt | self.location_llm
+        )
         
         # Initialize LLM for coordinate extraction
         self.coord_llm = ChatGoogleGenerativeAI(
@@ -50,15 +53,18 @@ class CoordinateExtractor:
             """
         )
         
-        self.coord_chain = LLMChain(llm=self.coord_llm, prompt=self.coord_prompt)
+        self.coord_chain = RunnableSequence(
+            self.coord_prompt | self.coord_llm
+        )
     
     def get_coordinates(self, question: str) -> Dict:
         try:
-            location_response = self.location_chain.run(question=question)
+            location_response = self.location_chain.invoke({"question": question})
             location_data = json.loads(location_response.strip())
+            
             location = location_data["location"]
             
-            coord_response = self.coord_chain.run(location=location)
+            coord_response = self.coord_chain.invoke({"location": location})
             return json.loads(coord_response.strip())
             
         except Exception as e:
@@ -121,7 +127,7 @@ def display_weather_card(weather_data, lat, lon):
 def main():
     st.set_page_config(page_title="Weather App", page_icon="🌤️", layout="wide")
     
-    # Add custom CSS
+    # Add custom CSS for styling
     st.markdown("""
         <style>
         .weather-card {
@@ -133,23 +139,6 @@ def main():
         .big-temp {
             font-size: 48px;
             font-weight: bold;
-        }
-        .weather-detail {
-            margin: 5px 0;
-        }
-        .stTextInput>div>div>input {
-            font-size: 18px;
-        }
-        .chat-message {
-            padding: 15px;
-            border-radius: 10px;
-            margin: 10px 0;
-        }
-        .user-message {
-            background-color: #e3f2fd;
-        }
-        .system-message {
-            background-color: #f5f5f5;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -201,7 +190,7 @@ def main():
         st.markdown("### 📝 Search History")
         
         if st.button("Clear History"):
-            st.session_state.chat_history = []
+            st.session_state.chat_history.clear()
             
         
         for idx, item in enumerate(reversed(st.session_state.chat_history)):
