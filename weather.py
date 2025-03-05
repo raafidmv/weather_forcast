@@ -214,7 +214,8 @@ def get_timezone(lat, lon):
     """
     Fetches the timezone for a given latitude and longitude using the TimeZoneDB API.
     """
-    url = f"http://api.timezonedb.com/v2.1/get-time-zone?key=4CFZLKN6P2YZ&format=json&by=position&lat={lat}&lng={lon}"
+    time1 = st.secrets["time"]["api_key"]
+    url = f"http://api.timezonedb.com/v2.1/get-time-zone?key={time1}&format=json&by=position&lat={lat}&lng={lon}"
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -255,7 +256,7 @@ def main():
         # Initialize classes
         coord_extractor = CoordinateExtractor()
         
-        weather_bot = WeatherByCoordinates("3aa05e76054ecc5912f49e7968a5a805")
+        weather_bot = WeatherByCoordinates(st.secrets["weather"]["api_key"])
 
         # User input
         question = st.text_input("Ask about weather in any location:", 
