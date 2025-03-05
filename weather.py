@@ -17,7 +17,7 @@ class CoordinateExtractor:
         # st.secrets["gemini"]["api_key"]
         
         self.location_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash"",
+            model="gemini-2.0-flash",
             temperature=0,
             google_api_key=self.api_key
         )
@@ -34,7 +34,7 @@ class CoordinateExtractor:
         self.location_chain = LLMChain(llm=self.location_llm, prompt=self.location_prompt)
         
         self.coord_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash"",
+            model="gemini-2.0-flash",
             temperature=0,
             google_api_key=self.api_key
         )
