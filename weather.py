@@ -94,6 +94,7 @@ class WeatherByCoordinates:
     def __init__(self, api_key):
         self.api_key = api_key
         self.base_url = "http://api.openweathermap.org/data/2.5/weather"
+        self.forecast_url = "http://api.openweathermap.org/data/2.5/forecast"  # Add forecast URL
 
     def get_weather(self, latitude, longitude):
         try:
@@ -117,7 +118,26 @@ class WeatherByCoordinates:
         except KeyError as e:
             return {"error": "Error processing weather data"}
 
-def display_weather_card(weather_data, lat, lon):
+    def get_forecast(self, latitude, longitude):
+        try:
+            params = {
+                'lat': latitude,
+                'lon': longitude,
+                'appid': self.api_key,
+                'units': 'metric'
+            }
+
+            response = requests.get(self.forecast_url, params=params)
+            response.raise_for_status()
+            forecast_data = response.json()
+            return forecast_data
+
+        except requests.exceptions.RequestException as e:
+            return {"error": f"Error fetching forecast data: {str(e)}"}
+        except KeyError as e:
+            return {"error": "Error processing forecast data"}
+
+def display_weather_card(weather_data, lat, lon, timezone_str):
     col1, col2 = st.columns(2)
     
     with col1:
@@ -135,26 +155,77 @@ def display_weather_card(weather_data, lat, lon):
         st.markdown(f"**Wind Speed**: {weather_data['wind']['speed']} m/s")
         st.markdown(f"**Wind Direction**: {weather_data['wind']['deg']}°")
 
-    st.markdown("### 🌅 Sun Times (IST)")
-    col3, col4 = st.columns(2)
+    st.markdown("### 🌅 Sun Times")
 
-    india_timezone = pytz.timezone("Asia/Kolkata")
+    location_timezone = pytz.timezone(timezone_str)
 
     sunrise_utc = datetime.utcfromtimestamp(weather_data['sys']['sunrise'])
     sunset_utc = datetime.utcfromtimestamp(weather_data['sys']['sunset'])
 
-    sunrise_ist = sunrise_utc.replace(tzinfo=pytz.utc).astimezone(india_timezone)
-    sunset_ist = sunset_utc.replace(tzinfo=pytz.utc).astimezone(india_timezone)
+    sunrise_local = sunrise_utc.replace(tzinfo=pytz.utc).astimezone(location_timezone)
+    sunset_local = sunset_utc.replace(tzinfo=pytz.utc).astimezone(location_timezone)
     
-    with col3:
-        st.markdown(f"**Sunrise**: {sunrise_ist.strftime('%I:%M %p')}")
-    
-    with col4:
-        st.markdown(f"**Sunset**: {sunset_ist.strftime('%I:%M %p')}")
-    
+    st.markdown(f"**Sunrise**: {sunrise_local.strftime('%I:%M %p %Z%z')}")
+    st.markdown(f"**Sunset**: {sunset_local.strftime('%I:%M %p %Z%z')}")
+
     st.markdown("### 🗺️ Location Details")
     st.markdown(f"**Latitude**: {lat}°")
     st.markdown(f"**Longitude**: {lon}°")
+
+def display_forecast(forecast_data, timezone_str):
+    st.markdown("### Forecasted Weather")
+    
+    location_timezone = pytz.timezone(timezone_str)
+    
+    # Group forecasts by day
+    daily_forecasts = {}
+    for forecast in forecast_data['list']:
+        forecast_time_utc = datetime.utcfromtimestamp(forecast['dt'])
+        forecast_time_local = forecast_time_utc.replace(tzinfo=pytz.utc).astimezone(location_timezone)
+        date = forecast_time_local.strftime("%Y-%m-%d")
+        
+        if date not in daily_forecasts:
+            daily_forecasts[date] = []
+        daily_forecasts[date].append(forecast)
+    
+    # Display daily forecasts
+    for date, forecasts in daily_forecasts.items():
+        st.markdown(f"#### {date}")
+        
+        col1, col2, col3 = st.columns(3)  # Display 3 forecasts per row
+        
+        for i, forecast in enumerate(forecasts[:3]):  # Display only the first 3 forecasts
+            forecast_time_utc = datetime.utcfromtimestamp(forecast['dt'])
+            forecast_time_local = forecast_time_utc.replace(tzinfo=pytz.utc).astimezone(location_timezone)
+            
+            if i == 0:
+                col = col1
+            elif i == 1:
+                col = col2
+            else:
+                col = col3
+            
+            with col:
+                st.markdown(f"**Time**: {forecast_time_local.strftime('%I:%M %p %Z%z')}")
+                st.markdown(f"**Weather**: {forecast['weather'][0]['description'].capitalize()}")
+                st.markdown(f"**Temperature**: {forecast['main']['temp']}°C")
+
+def get_timezone(lat, lon):
+    """
+    Fetches the timezone for a given latitude and longitude using the TimeZoneDB API.
+    """
+    url = f"http://api.timezonedb.com/v2.1/get-time-zone?key=YOUR_TIMEZONEDB_API_KEY&format=json&by=position&lat={lat}&lng={lon}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        return data['zoneName']
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching timezone: {e}")
+        return None
+    except (KeyError, json.JSONDecodeError) as e:
+        st.error(f"Error parsing timezone response: {e}")
+        return None
 
 def main():
     st.set_page_config(page_title="Weather App", page_icon="🌤️", layout="wide")
@@ -208,15 +279,31 @@ def main():
                     if "error" in weather_data:
                         st.error(weather_data["error"])
                     else:
+                        # Fetch forecast data
+                        forecast_data = weather_bot.get_forecast(lat, lon)
+                        if "error" in forecast_data:
+                            st.error(forecast_data["error"])
+                            forecast_data = None
+
+                        # Get the timezone for the location
+                        timezone_str = get_timezone(lat, lon)
+                        if not timezone_str:
+                            timezone_str = 'UTC'  # Default to UTC if timezone cannot be fetched
+
                         # Store in session state
                         st.session_state.chat_history.append({
                             "question": question,
                             "weather_data": weather_data,
-                            "coordinates": {"lat": lat, "lon": lon}
+                            "coordinates": {"lat": lat, "lon": lon},
+                            "timezone": timezone_str
                         })
                         
                         # Display current weather
-                        display_weather_card(weather_data, lat, lon)
+                        display_weather_card(weather_data, lat, lon, timezone_str)
+                        
+                        # Display forecast if available
+                        if forecast_data:
+                            display_forecast(forecast_data, timezone_str)
 
     # Display chat history in the sidebar
     with col_history:
@@ -230,7 +317,8 @@ def main():
             with st.expander(f"Query: {item['question']}", expanded=False):
                 display_weather_card(item['weather_data'], 
                                   item['coordinates']['lat'], 
-                                  item['coordinates']['lon'])
+                                  item['coordinates']['lon'],
+                                  item['timezone'])
 
 if __name__ == "__main__":
     main()
