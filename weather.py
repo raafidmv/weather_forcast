@@ -11,9 +11,19 @@ from datetime import datetime
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
+# Function to log messages for debugging
+def log_message(message: str):
+    """Logs a message to Streamlit for debugging."""
+    st.write(f"LOG: {message}")
+
 class CoordinateExtractor:
     def __init__(self):
-        self.api_key = st.secrets["gemini"]["api_key"]
+        try:
+            self.api_key = st.secrets["gemini"]["api_key"]
+            log_message("Successfully retrieved API key.")
+        except KeyError as e:
+            log_message(f"Error retrieving API key: {str(e)}")
+            raise Exception("API key not found in Streamlit secrets.")
         
         # Initialize LLM for location extraction
         self.location_llm = ChatGoogleGenerativeAI(
@@ -59,21 +69,30 @@ class CoordinateExtractor:
     
     def get_coordinates(self, question: str) -> Dict:
         try:
+            log_message(f"Running location chain with question: {question}")
+            
             # Extract location name
             location_response = self.location_chain.invoke({"question": question})
+            
+            log_message(f"Location response received: {location_response}")
             
             # Ensure response is processed correctly (extract text from AIMessage)
             location_data = json.loads(location_response.content)  # Extract content
             
             location = location_data["location"]
             
+            log_message(f"Extracted location: {location}")
+            
             # Extract coordinates for the location
             coord_response = self.coord_chain.invoke({"location": location})
+            
+            log_message(f"Coordinate response received: {coord_response}")
             
             # Ensure response is processed correctly (extract text from AIMessage)
             return json.loads(coord_response.content)  # Extract content
             
         except Exception as e:
+            log_message(f"Error extracting coordinates: {str(e)}")
             return {"error": f"Failed to extract coordinates: {str(e)}"}
 
 class WeatherByCoordinates:
@@ -89,15 +108,24 @@ class WeatherByCoordinates:
                 'appid': self.api_key,
                 'units': 'metric'
             }
+            
+            log_message(f"Fetching weather data for coordinates: lat={latitude}, lon={longitude}")
+            
             response = requests.get(self.base_url, params=params)
+            
             response.raise_for_status()
-
+            
             weather_data = response.json()
+            
+            log_message(f"Weather data received: {weather_data}")
+            
             return weather_data
 
         except requests.exceptions.RequestException as e:
+            log_message(f"Error fetching weather data: {str(e)}")
             return {"error": f"Error fetching weather data: {str(e)}"}
-        except KeyError:
+        except KeyError as e:
+            log_message(f"Error processing weather data: {str(e)}")
             return {"error": "Error processing weather data"}
 
 def display_weather_card(weather_data, lat, lon):
@@ -157,6 +185,7 @@ def main():
         
         # Initialize classes
         coord_extractor = CoordinateExtractor()
+        
         weather_bot = WeatherByCoordinates("3aa05e76054ecc5912f49e7968a5a805")
 
         # User input
@@ -170,7 +199,7 @@ def main():
                 coord_data = coord_extractor.get_coordinates(question)
                 
                 if "error" in coord_data:
-                    st.error(f"Error: {coord_data['error']}")
+                    st.error(coord_data["error"])
                 else:
                     lat = float(coord_data["lat"].strip('"'))
                     lon = float(coord_data["lon"].strip('"'))
