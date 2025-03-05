@@ -59,13 +59,19 @@ class CoordinateExtractor:
     
     def get_coordinates(self, question: str) -> Dict:
         try:
+            # Extract location name
             location_response = self.location_chain.invoke({"question": question})
-            location_data = json.loads(location_response.strip())
+            
+            # Ensure response is processed correctly (extract text from AIMessage)
+            location_data = json.loads(location_response.content)  # Extract content
             
             location = location_data["location"]
             
+            # Extract coordinates for the location
             coord_response = self.coord_chain.invoke({"location": location})
-            return json.loads(coord_response.strip())
+            
+            # Ensure response is processed correctly (extract text from AIMessage)
+            return json.loads(coord_response.content)  # Extract content
             
         except Exception as e:
             return {"error": f"Failed to extract coordinates: {str(e)}"}
