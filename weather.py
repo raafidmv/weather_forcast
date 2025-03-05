@@ -214,7 +214,7 @@ def get_timezone(lat, lon):
     """
     Fetches the timezone for a given latitude and longitude using the TimeZoneDB API.
     """
-    url = f"http://api.timezonedb.com/v2.1/get-time-zone?key=YOUR_TIMEZONEDB_API_KEY&format=json&by=position&lat={lat}&lng={lon}"
+    url = f"http://api.timezonedb.com/v2.1/get-time-zone?key=4CFZLKN6P2YZ&format=json&by=position&lat={lat}&lng={lon}"
     try:
         response = requests.get(url)
         response.raise_for_status()
