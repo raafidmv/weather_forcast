@@ -23,13 +23,14 @@ class CoordinateExtractor:
         )
         
         self.location_prompt = PromptTemplate(
-            input_variables=["question"],
-            template="""
-            Extract only the location name from this question. 
-            Question: {question}
-            Return only the location name in JSON format like {{"location": "extracted_location"}}
-            """
-        )
+    input_variables=["question"],
+    template="""
+    Extract ONLY the location name from the following question. 
+    Respond STRICTLY in this JSON format: {{"location": "LOCATION_NAME"}}
+    
+    Question: {question}
+    """
+)
         
         self.location_chain = LLMChain(llm=self.location_llm, prompt=self.location_prompt)
         
@@ -40,14 +41,14 @@ class CoordinateExtractor:
         )
         
         self.coord_prompt = PromptTemplate(
-            input_variables=["location"],
-            template="""
-            Provide the exact latitude and longitude coordinates for {location}.
-            Return only a JSON object in this exact format:
-            {{"lat": "LATITUDE", "lon": "LONGITUDE"}}
-            Use exactly 4 decimal places. Only return the JSON, no other text.
-            """
-        )
+    input_variables=["location"],
+    template="""
+    Provide ONLY the exact latitude and longitude for {location}.
+    Respond STRICTLY in this JSON format:
+    {{"lat": "LATITUDE", "lon": "LONGITUDE"}}
+    Use exactly 4 decimal places. NO additional text.
+    """
+)
         
         self.coord_chain = LLMChain(llm=self.coord_llm, prompt=self.coord_prompt)
     
