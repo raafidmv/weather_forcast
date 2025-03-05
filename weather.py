@@ -6,6 +6,8 @@ import json
 from typing import Dict
 import requests
 from datetime import datetime
+import re
+import traceback
 
 # Initialize session state for storing chat history
 if 'chat_history' not in st.session_state:
@@ -14,54 +16,94 @@ if 'chat_history' not in st.session_state:
 class CoordinateExtractor:
     def __init__(self):
         self.api_key = st.secrets["gemini"]["api_key"]
-        # st.secrets["gemini"]["api_key"]
         
         self.location_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-pro",  # Changed from gemini-2.0-flash to gemini-pro
             temperature=0,
             google_api_key=self.api_key
         )
         
         self.location_prompt = PromptTemplate(
-    input_variables=["question"],
-    template="""
-    Extract ONLY the location name from the following question. 
-    Respond STRICTLY in this JSON format: {{"location": "LOCATION_NAME"}}
-    
-    Question: {question}
-    """
-)
+            input_variables=["question"],
+            template="""
+            Extract ONLY the location name from the following question. 
+            Respond STRICTLY in this JSON format: {{"location": "LOCATION_NAME"}}
+            
+            Question: {question}
+            """
+        )
         
         self.location_chain = LLMChain(llm=self.location_llm, prompt=self.location_prompt)
         
         self.coord_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-pro",  # Changed from gemini-2.0-flash to gemini-pro
             temperature=0,
             google_api_key=self.api_key
         )
         
         self.coord_prompt = PromptTemplate(
-    input_variables=["location"],
-    template="""
-    Provide ONLY the exact latitude and longitude for {location}.
-    Respond STRICTLY in this JSON format:
-    {{"lat": "LATITUDE", "lon": "LONGITUDE"}}
-    Use exactly 4 decimal places. NO additional text.
-    """
-)
+            input_variables=["location"],
+            template="""
+            Provide ONLY the exact latitude and longitude for {location}.
+            Respond STRICTLY in this JSON format:
+            {{"lat": "LATITUDE", "lon": "LONGITUDE"}}
+            Use exactly 4 decimal places. NO additional text.
+            """
+        )
         
         self.coord_chain = LLMChain(llm=self.coord_llm, prompt=self.coord_prompt)
     
     def get_coordinates(self, question: str) -> Dict:
         try:
+            # Add print statement for debugging
             location_response = self.location_chain.run(question=question)
-            location_data = json.loads(location_response.strip())
+            st.write(f"Raw location response: {location_response}")
+            
+            # Trim and clean the response
+            location_response = location_response.strip()
+            
+            # Check if response is empty
+            if not location_response:
+                return {"error": "Empty location response"}
+            
+            try:
+                location_data = json.loads(location_response)
+            except json.JSONDecodeError:
+                # If direct parsing fails, try to extract manually
+                match = re.search(r'\{.*\}', location_response)
+                if match:
+                    location_response = match.group(0)
+                    location_data = json.loads(location_response)
+                else:
+                    return {"error": f"Failed to parse location: {location_response}"}
+            
             location = location_data["location"]
             
+            # Add print statement for debugging
             coord_response = self.coord_chain.run(location=location)
-            return json.loads(coord_response.strip())
+            st.write(f"Raw coordinate response: {coord_response}")
+            
+            # Trim and clean the coordinate response
+            coord_response = coord_response.strip()
+            
+            # Check if response is empty
+            if not coord_response:
+                return {"error": "Empty coordinate response"}
+            
+            try:
+                return json.loads(coord_response)
+            except json.JSONDecodeError:
+                # If direct parsing fails, try to extract manually
+                match = re.search(r'\{.*\}', coord_response)
+                if match:
+                    coord_response = match.group(0)
+                    return json.loads(coord_response)
+                else:
+                    return {"error": f"Failed to parse coordinates: {coord_response}"}
             
         except Exception as e:
+            # Log the full exception for more details
+            st.error(f"Full error: {traceback.format_exc()}")
             return {"error": f"Failed to extract coordinates: {str(e)}"}
 
 class WeatherByCoordinates:
@@ -188,38 +230,46 @@ def main():
 
         if question:
             with st.spinner("Fetching weather information..."):
-                # Get coordinates
-                coord_data = coord_extractor.get_coordinates(question)
-                
-                if "error" in coord_data:
-                    st.error(f"Error: {coord_data['error']}")
-                else:
-                    # Remove quotes from coordinates if present
-                    lat = float(coord_data["lat"].strip('"'))
-                    lon = float(coord_data["lon"].strip('"'))
+                try:
+                    # Get coordinates
+                    coord_data = coord_extractor.get_coordinates(question)
                     
-                    # Get weather information
-                    weather_data = weather_bot.get_weather(lat, lon)
+                    # Add print statement to see what's being returned
+                    st.write(f"Coordinate data: {coord_data}")
                     
-                    if "error" in weather_data:
-                        st.error(weather_data["error"])
+                    if "error" in coord_data:
+                        st.error(f"Error: {coord_data['error']}")
                     else:
-                        # Store in session state
-                        st.session_state.chat_history.append({
-                            "question": question,
-                            "weather_data": weather_data,
-                            "coordinates": {"lat": lat, "lon": lon}
-                        })
+                        # Remove quotes from coordinates if present
+                        lat = float(str(coord_data["lat"]).strip('"'))
+                        lon = float(str(coord_data["lon"]).strip('"'))
                         
-                        # Display current weather
-                        display_weather_card(weather_data, lat, lon)
+                        # Get weather information
+                        weather_data = weather_bot.get_weather(lat, lon)
+                        
+                        if "error" in weather_data:
+                            st.error(weather_data["error"])
+                        else:
+                            # Store in session state
+                            st.session_state.chat_history.append({
+                                "question": question,
+                                "weather_data": weather_data,
+                                "coordinates": {"lat": lat, "lon": lon}
+                            })
+                            
+                            # Display current weather
+                            display_weather_card(weather_data, lat, lon)
+                
+                except Exception as e:
+                    st.error(f"An unexpected error occurred: {str(e)}")
+                    st.error(traceback.format_exc())
 
     # Display chat history in the sidebar
     with col_history:
         st.markdown("### 📝 Search History")
         if st.button("Clear History"):
             st.session_state.chat_history = []
-            # st.rerun()
+            st.rerun()
 
             
         for idx, item in enumerate(reversed(st.session_state.chat_history)):
