@@ -5,25 +5,19 @@ from langchain_core.runnables import RunnableSequence
 import json
 from typing import Dict
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import re  # Import the regular expression module
+import pytz
 
 # Initialize session state for storing chat history
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
-# Function to log messages for debugging
-def log_message(message: str):
-    """Logs a message to Streamlit for debugging."""
-    st.write(f"LOG: {message}")
-
 class CoordinateExtractor:
     def __init__(self):
         try:
             self.api_key = st.secrets["gemini"]["api_key"]
-            log_message("Successfully retrieved API key.")
         except KeyError as e:
-            log_message(f"Error retrieving API key: {str(e)}")
             raise Exception("API key not found in Streamlit secrets.")
         
         # Initialize LLM for location extraction
@@ -70,43 +64,30 @@ class CoordinateExtractor:
     
     def get_coordinates(self, question: str) -> Dict:
         try:
-            log_message(f"Running location chain with question: {question}")
-            
             # Extract location name
             location_response = self.location_chain.invoke({"question": question})
-            
-            log_message(f"Location response received: {location_response}")
             
             # Extract JSON using regex
             json_match = re.search(r'\{.*\}', location_response.content)
             if json_match:
                 location_json = json_match.group(0)
-                log_message(f"Extracted JSON: {location_json}")
                 location_data = json.loads(location_json)
                 location = location_data["location"]
                 
-                log_message(f"Extracted location: {location}")
-                
                 # Extract coordinates for the location
                 coord_response = self.coord_chain.invoke({"location": location})
-                
-                log_message(f"Coordinate response received: {coord_response}")
                 
                 # Extract JSON using regex
                 coord_json_match = re.search(r'\{.*\}', coord_response.content)
                 if coord_json_match:
                     coord_json = coord_json_match.group(0)
-                    log_message(f"Extracted JSON: {coord_json}")
                     return json.loads(coord_json)
                 else:
-                    log_message("No JSON found in coordinate response")
                     return {"error": "No JSON found in coordinate response"}
             else:
-                log_message("No JSON found in location response")
                 return {"error": "No JSON found in location response"}
             
         except Exception as e:
-            log_message(f"Error extracting coordinates: {str(e)}")
             return {"error": f"Failed to extract coordinates: {str(e)}"}
 
 class WeatherByCoordinates:
@@ -123,23 +104,17 @@ class WeatherByCoordinates:
                 'units': 'metric'
             }
             
-            log_message(f"Fetching weather data for coordinates: lat={latitude}, lon={longitude}")
-            
             response = requests.get(self.base_url, params=params)
             
             response.raise_for_status()
             
             weather_data = response.json()
             
-            log_message(f"Weather data received: {weather_data}")
-            
             return weather_data
 
         except requests.exceptions.RequestException as e:
-            log_message(f"Error fetching weather data: {str(e)}")
             return {"error": f"Error fetching weather data: {str(e)}"}
         except KeyError as e:
-            log_message(f"Error processing weather data: {str(e)}")
             return {"error": "Error processing weather data"}
 
 def display_weather_card(weather_data, lat, lon):
@@ -150,27 +125,36 @@ def display_weather_card(weather_data, lat, lon):
         st.markdown(f"<div class='big-temp'>{weather_data['main']['temp']}°C</div>", unsafe_allow_html=True)
         st.markdown(f"Feels like: {weather_data['main']['feels_like']}°C")
         st.markdown(f"_{weather_data['weather'][0]['description'].capitalize()}_")
+        st.markdown(f"**General Weather**: {weather_data['weather'][0]['description'].capitalize()}")
+        st.markdown(f"**Temperature Range**: {weather_data['main']['temp_min']}°C - {weather_data['main']['temp_max']}°C")
     
     with col2:
         st.markdown("### Details")
-        st.markdown(f"Humidity: {weather_data['main']['humidity']}%")
-        st.markdown(f"Pressure: {weather_data['main']['pressure']} hPa")
-        st.markdown(f"Wind Speed: {weather_data['wind']['speed']} m/s")
-    
-    st.markdown("### 🌅 Sun Times")
+        st.markdown(f"**Humidity**: {weather_data['main']['humidity']}%")
+        st.markdown(f"**Pressure**: {weather_data['main']['pressure']} hPa")
+        st.markdown(f"**Wind Speed**: {weather_data['wind']['speed']} m/s")
+        st.markdown(f"**Wind Direction**: {weather_data['wind']['deg']}°")
+
+    st.markdown("### 🌅 Sun Times (IST)")
     col3, col4 = st.columns(2)
+
+    india_timezone = pytz.timezone("Asia/Kolkata")
+
+    sunrise_utc = datetime.utcfromtimestamp(weather_data['sys']['sunrise'])
+    sunset_utc = datetime.utcfromtimestamp(weather_data['sys']['sunset'])
+
+    sunrise_ist = sunrise_utc.replace(tzinfo=pytz.utc).astimezone(india_timezone)
+    sunset_ist = sunset_utc.replace(tzinfo=pytz.utc).astimezone(india_timezone)
     
     with col3:
-        sunrise = datetime.fromtimestamp(weather_data['sys']['sunrise'])
-        st.markdown(f"Sunrise: {sunrise.strftime('%I:%M %p')}")
+        st.markdown(f"**Sunrise**: {sunrise_ist.strftime('%I:%M %p')}")
     
     with col4:
-        sunset = datetime.fromtimestamp(weather_data['sys']['sunset'])
-        st.markdown(f"Sunset: {sunset.strftime('%I:%M %p')}")
+        st.markdown(f"**Sunset**: {sunset_ist.strftime('%I:%M %p')}")
     
     st.markdown("### 🗺️ Location Details")
-    st.markdown(f"Latitude: {lat}°")
-    st.markdown(f"Longitude: {lon}°")
+    st.markdown(f"**Latitude**: {lat}°")
+    st.markdown(f"**Longitude**: {lon}°")
 
 def main():
     st.set_page_config(page_title="Weather App", page_icon="🌤️", layout="wide")
